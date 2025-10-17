@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trading_platform
+      POSTGRES_USER: trading_user
+      POSTGRES_PASSWORD: secure_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./shared/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  orderbook-service:
+    build:
+      context: ./services/orderbook-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://trading_user:secure_password@postgres:5432/trading_platform
+
+  user-service:
+    build:
+      context: ./services/user-service
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://trading_user:secure_password@postgres:5432/trading_platform
+
+  market-data-service:
+    build:
+      context: ./services/market-data-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    depends_on:
+      - redis
+    environment:
+      REDIS_URL: redis://redis:6379
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+      - postgres
+      - orderbook-service
+      - user-service
+      - market-data-service
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://trading_user:secure_password@postgres:5432/trading_platform
+      ORDERBOOK_SERVICE_URL: http://orderbook-service:8082
+      USER_SERVICE_URL: http://user-service:8084
+      MARKET_DATA_SERVICE_URL: http://market-data-service:8083
+      JWT_SECRET: your-super-secret-jwt-key-change-this
+      FRONTEND_URL: http://localhost:8080
+    volumes:
+      - ./frontend/build:/app/frontend/build
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
+  default:
+    name: trading_platform
