@@ -1,6 +1,6 @@
 # Trading Platform
 
-A complete web-based trading platform with real-time order book, user management, and market data feeds.
+A complete web-based trading platform with real-time order book, user management, and market data feeds.  
 
 ## 🏗️ Architecture
 
